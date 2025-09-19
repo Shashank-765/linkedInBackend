@@ -4,7 +4,10 @@ import { generatePostContent, generateImages } from "../content.js";
 import { uploadImageToLinkedIn, createLinkedInPost } from "../linkedin.js";
 import axios from "axios";
 import dotenv from "dotenv";
+import AutoPost from "../models/AutoPost.js";
+
 dotenv.config();
+import { startAutoPosting, stopAutoPosting } from "../scheduler/autoPostScheduler.js";
 
 const router = express.Router();
 
@@ -50,6 +53,57 @@ router.post("/generate", async (req, res) => {
     res.status(500).json({ error: "Failed to generate content" });
   }
 });
+
+
+
+/**
+ * @route   POST /auto-post/start
+ * @desc    Start auto-posting scheduler
+ */
+router.post("/start", async (req, res) => {
+  try {
+    startAutoPosting();
+    res.json({ success: true, message: "Auto-posting started" });
+  } catch (err) {
+    console.error("Error starting auto-posting:", err);
+    res.status(500).json({ success: false, error: "Failed to start auto-posting" });
+  }
+});
+
+/**
+ * @route   POST /auto-post/stop
+ * @desc    Stop auto-posting scheduler
+ */
+router.post("/stop", async (req, res) => {
+  try {
+    stopAutoPosting();
+    res.json({ success: true, message: "Auto-posting stopped" });
+  } catch (err) {
+    console.error("Error stopping auto-posting:", err);
+    res.status(500).json({ success: false, error: "Failed to stop auto-posting" });
+  }
+});
+
+
+router.get("/status", async (req, res) => {
+  try {
+    const scheduler = await AutoPost.findOne();
+    if (!scheduler) {
+      return res.json({ running: false });
+    }
+    res.json({
+      running: scheduler.status === "active",
+      lastPostedAt: scheduler.lastPostedAt,
+      nextPostAt: scheduler.nextPostAt,
+      linkedInPosts: scheduler.linkedInPosts
+    });
+  } catch (err) {
+    console.error("Error fetching auto-post status:", err);
+    res.status(500).json({ error: "Failed to fetch auto-post status" });
+  }
+});
+
+
 
 
 /**
@@ -157,7 +211,7 @@ console.log('response.data.choices[0]', response.data.choices[0])
     res.json({ topics });
 
   } catch (err) {
-    console.error("Error fetching trending topics:", err.message);
+    console.error("Error fetching trending topics:", err);
     res.status(500).json({ error: "Failed to fetch trending topics" });
   }
 });

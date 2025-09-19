@@ -26,7 +26,7 @@ export async function uploadImageToLinkedIn(filePath) {
   const uploadUrl = initRes.data.value.uploadUrl;
   const assetUrn = initRes.data.value.image;
 
-  const imgData = fs.readFileSync(filePath);
+  const imgData = fs.readFileSync(`./uploads/${filePath}`);
   await axios.put(uploadUrl, imgData, {
     headers: { "Content-Type": "image/png" },
   });

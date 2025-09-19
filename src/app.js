@@ -2,6 +2,7 @@ import express from "express";
 import bodyParser from "body-parser";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
+import path from "path";
 
 import postsRouter from "./routes/posts.js";
 import Post from "./models/Post.js";
@@ -14,6 +15,8 @@ dotenv.config();
 const app = express();
 app.use(bodyParser.json());
 app.use(cors());
+
+app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
 // 🔗 DB connect
 mongoose
