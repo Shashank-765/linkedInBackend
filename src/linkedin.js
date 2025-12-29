@@ -26,10 +26,10 @@ export async function uploadImageToLinkedIn(filePath) {
   const uploadUrl = initRes.data.value.uploadUrl;
   const assetUrn = initRes.data.value.image;
 
-  const imgData = fs.readFileSync(`./uploads/${filePath}`);
-  await axios.put(uploadUrl, imgData, {
-    headers: { "Content-Type": "image/png" },
-  });
+ const res = await axios.get(filePath, { responseType: "arraybuffer" });
+await axios.put(uploadUrl, res.data, {
+  headers: { "Content-Type": "image/png" },
+});
 
   return assetUrn;
 }
@@ -38,33 +38,66 @@ export async function uploadImageToLinkedIn(filePath) {
  * Create LinkedIn post with text + images
  */
 export async function createLinkedInPost(commentary, imageUrns) {
-  const postData = {
-    author: ORG_URN,
-    commentary,
-    visibility: "PUBLIC",
-    distribution: {
-      feedDistribution: "MAIN_FEED",
-      targetEntities: [],
-      thirdPartyDistributionChannels: [],
-    },
-    content: {
-      multiImage: { images: imageUrns.map((id) => ({ id })) },
-    },
-    lifecycleState: "PUBLISHED",
-    isReshareDisabledByAuthor: false,
-  };
+  try {
 
-  const postResponse = await axios.post(
-    "https://api.linkedin.com/rest/posts",
-    postData,
-    {
-      headers: {
-        Authorization: `Bearer ${TOKEN}`,
-        "LinkedIn-Version": "202508",
-        "Content-Type": "application/json",
+    // 🔒 1️⃣ Sanitize LinkedIn-breaking characters
+    const sanitizeLinkedInText = (text) => {
+      return text
+        // Convert (AMCs) → - AMCs
+        .replace(/\(([^)]+)\)/g, " - $1")
+        // Remove leftover brackets just in case
+        .replace(/[()]/g, "")
+        // Normalize excessive newlines
+        .replace(/\n{3,}/g, "\n\n")
+        // Trim whitespace
+        .trim();
+    };
+
+    const safeCommentary = sanitizeLinkedInText(commentary);
+
+    console.log("📝 Final LinkedIn Commentary:\n", safeCommentary);
+
+    const postData = {
+      author: ORG_URN,
+      commentary: safeCommentary,
+      visibility: "PUBLIC",
+      distribution: {
+        feedDistribution: "MAIN_FEED",
+        targetEntities: [],
+        thirdPartyDistributionChannels: [],
       },
-    }
-  );
+      content: imageUrns?.length
+        ? {
+          
+            media: {
+              id: imageUrns[0],
+            },
+          }
+        : undefined,
+      lifecycleState: "PUBLISHED",
+      isReshareDisabledByAuthor: false,
+    };
 
-  return postResponse.data;
+    const postResponse = await axios.post(
+      "https://api.linkedin.com/rest/posts",
+      postData,
+      {
+        headers: {
+          Authorization: `Bearer ${TOKEN}`,
+          "LinkedIn-Version": "202508",
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    return postResponse.data;
+
+  } catch (error) {
+    console.error(
+      "❌ LinkedIn post creation error:",
+      error.response ? error.response.data : error.message
+    );
+    throw error;
+  }
+
 }

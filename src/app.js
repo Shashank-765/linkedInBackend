@@ -9,10 +9,10 @@ import Post from "./models/Post.js";
 import { uploadImageToLinkedIn, createLinkedInPost } from "./linkedin.js";
 import { scheduleEveryFiveSeconds } from "./scheduler.js";
 import cors from "cors";
+const app = express();
 
 
 dotenv.config();
-const app = express();
 app.use(bodyParser.json());
 app.use(cors());
 
@@ -20,18 +20,26 @@ app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
 // 🔗 DB connect
 mongoose
-  .connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
-  .then(() => console.log("✅ MongoDB connected"))
-  .catch((err) => console.error("❌ MongoDB error:", err));
+.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+.then(() => console.log("✅ MongoDB connected"))
+.catch((err) => console.error("❌ MongoDB error:", err));
 
 // Routes
 app.use("/posts", postsRouter);
 
+app.get("/", (req, res) => {
+  res.send("Welcome to the LinkedIn Auto-Poster API");
+});
 // Scheduler – auto post
 // run every 5s for testing
 scheduleEveryFiveSeconds(async () => {
   const now = new Date();
+//  const candidate = await Post.find({
+//     status: "posted",
+    
+//   });
 
+//   console.log('candidate', candidate)
   // find candidates (not claimed yet)
   const candidates = await Post.find({
     status: "scheduled",
@@ -46,6 +54,7 @@ scheduleEveryFiveSeconds(async () => {
       { new: true }
     );
 
+
     // if claimed is null, someone else already claimed it — skip
     if (!claimed) continue;
 
@@ -55,6 +64,7 @@ scheduleEveryFiveSeconds(async () => {
       for (const imgPath of claimed.images) {
         const urn = await uploadImageToLinkedIn(imgPath);
         imageUrns.push(urn);
+        // imageUrns.push(urn);
       }
 
       // Create LinkedIn post
@@ -100,7 +110,7 @@ scheduleEveryFiveSeconds(async () => {
 
 
 
-app.listen(3000, () => console.log("🚀 API running at http://localhost:3000"));
+app.listen(3002, () => console.log("🚀 API running at http://localhost:3002"));
 
 
 

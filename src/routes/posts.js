@@ -15,15 +15,18 @@ const router = express.Router();
  * Generate draft post
  */
 router.post("/generate", async (req, res) => {
-  const { topic, autoApprove } = req.body;
+  const { topic, autoApprove, image } = req.body;
   try {
     const content = await generatePostContent(topic);
-    const images = await generateImages(topic, 2);
+    // if(!image){
+    // image = await generateImages(topic, 1);
+    // }
+    console.log('req.body', req.body)
 
     let post = await Post.create({
       topic,
       content,
-      images,
+      images: image ? [image] : [],
       autoApprove: !!autoApprove,
       status: autoApprove ? "approved" : "pending",
     });
@@ -154,67 +157,77 @@ router.get("/", async (req, res) => {
 
 /**
  * GET /trending-topics
- * Fetch trending Twitter topics from ChatGPT and return clean JSON
+ * Google News based trending topics by industry
  */
 router.get("/trending-topics", async (req, res) => {
   try {
-    // GPT prompt to generate trending topics
-    const prompt = `
-You are an AI assistant that outputs ONLY valid JSON, no explanations, no markdown, no code blocks.
+    console.log('hello',  req.query)
+    const {
+      industry = "technology",
+      country = "IN",
+      page = 1,
+      limit = 5
+    } = req.query;
 
-Generate 5 latest trending topics on Twitter TODAY. 
-Output must be a JSON array in this exact format:
+    const pageNum = parseInt(page, 10);
+    const limitNum = parseInt(limit, 10);
 
-[
-  {
-    "topic": "string",
-    "tweets": number,
-    "description": "string"
-  }
-]
+    // 🔗 Your existing Google News API
+    const newsApiUrl = `http://localhost:5003/api/news`;
 
-Ensure that:
-- "topic" is the trending keyword or hashtag
-- "tweets" is an approximate number of tweets
-- "description" is a short summary of the topic
-`;
-
-    const response = await axios.post(
-      "https://api.openai.com/v1/chat/completions",
-      {
-        model: "gpt-4o-mini",
-        messages: [
-          { role: "system", content: "You are an AI assistant that outputs valid JSON only." },
-          { role: "user", content: prompt }
-        ],
-        temperature: 0,
-        max_tokens: 300,
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-          "Content-Type": "application/json",
-        },
+    const newsResponse = await axios.get(newsApiUrl, {
+      params: {
+        country,
+        category: industry,
+        limit: 5 // fetch more for better trends
       }
-    );
+    });
+  // console.log('newsResponse.data', newsResponse.data)
+    const articles = newsResponse.data.articles || [];
 
-    const text = response.data.choices[0].message.content.trim();
-console.log('response.data.choices[0]', response.data.choices[0])
-    let topics;
-    try {
-      topics = JSON.parse(text);
-    } catch (err) {
-      console.error("Invalid JSON from GPT:", text);
-      return res.status(500).json({ error: "Invalid JSON received from GPT" });
-    }
+    /**
+     * Convert articles → trending topics
+     * Logic:
+     * - Use title as topic
+     * - Rank decides popularity
+     * - Count similar sources
+     */
+    const topics = articles.map((article, index) => ({
+      topic: article.title,
+      tweets:  article.rank, // simulated popularity
+      description: article.description
+        ? article.description.replace(/<[^>]*>/g, "").slice(0, 120)
+        : "Trending technology news",
+      source: article.source,
+      publishedAt: article.published,
+      link: article.link,
+      image: article.thumbnail
+    }));
 
-    res.json({ topics });
+    // Pagination
+    const startIndex = (pageNum - 1) * limitNum;
+    const paginatedTopics = topics.slice(startIndex, startIndex + limitNum);
 
-  } catch (err) {
-    console.error("Error fetching trending topics:", err);
-    res.status(500).json({ error: "Failed to fetch trending topics" });
+    res.json({
+      success: true,
+      industry,
+      country,
+      page: pageNum,
+      limit: limitNum,
+      totalTopics: topics.length,
+      topics: paginatedTopics
+    });
+
+  } catch (error) {
+    console.error("Trending topics error:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to fetch trending topics from Google News"
+    });
   }
 });
+
+
 
 
 
