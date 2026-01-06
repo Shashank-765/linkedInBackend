@@ -4,110 +4,93 @@ import { generatePostContent, generateImages } from "../content.js";
 import { uploadImageToLinkedIn, createLinkedInPost } from "../linkedin.js";
 import axios from "axios";
 import dotenv from "dotenv";
+
 import AutoPost from "../models/AutoPost.js";
+import { upload } from "../middleware/upload.js";
+
 
 dotenv.config();
-import { startAutoPosting, stopAutoPosting } from "../scheduler/autoPostScheduler.js";
+import { startAutoPosting,
+  stopAutoPosting,
+  getSchedulerStatus,
+  updateAutoPostSchedule } from "../scheduler/autoPostScheduler.js";
 
 const router = express.Router();
 
 /**
  * Generate draft post
  */
-router.post("/generate", async (req, res) => {
-  const { topic, autoApprove, image } = req.body;
-  try {
-    const content = await generatePostContent(topic);
-    // if(!image){
-    // image = await generateImages(topic, 1);
-    // }
-    console.log('req.body', req.body)
+router.post("/generate", upload.single("image"), async (req, res) => {
+  const { topic, autoApprove, image: imageUrl } = req.body;
 
-    let post = await Post.create({
+  if (!topic) {
+    return res.status(400).json({ error: "Topic is required" });
+  }
+
+  try {
+    let imagePath = null;
+
+    if (req.file) {
+      imagePath = `/uploads/${req.file.filename}`;
+    } else if (imageUrl) {
+      imagePath = imageUrl;
+    }
+
+    const content = await generatePostContent(topic);
+
+    const auto = autoApprove === true || autoApprove === "true";
+
+    const post = await Post.create({
       topic,
       content,
-      images: image ? [image] : [],
-      autoApprove: !!autoApprove,
-      status: autoApprove ? "approved" : "pending",
+      images: imagePath ? [imagePath] : [],
+      autoApprove: auto,
+      status: auto ? "approved" : "pending",
     });
-
-//     // 🚀 If autoApprove = true → post instantly
-//     if (autoApprove) {
-//          const claimed = await Post.findOneAndUpdate(
-//     { _id: post._id, status: post.status }, // status likely "approved" or "pending"
-//     { $set: { status: "posting", postedAt: new Date(), attempts: 1 } },
-//     { new: true }
-//   );
-
-//     if (claimed) {
-//       const imageUrns = [];
-//       for (const imgPath of images) {
-//         const urn = await uploadImageToLinkedIn(imgPath);
-//         imageUrns.push(urn);
-//       }
-//       await createLinkedInPost(content, imageUrns);
-//       post = await Post.findByIdAndUpdate(post._id, { status: "posted", postedAt: new Date() }, { new: true });
-//     }
-// }
 
     res.json(post);
   } catch (err) {
     console.error("❌ Error generating post:", err);
-    res.status(500).json({ error: "Failed to generate content" });
+    res.status(500).json({
+      error: "Failed to generate post",
+      details: err.message,
+    });
   }
 });
 
 
 
-/**
- * @route   POST /auto-post/start
- * @desc    Start auto-posting scheduler
- */
+
 router.post("/start", async (req, res) => {
   try {
-    startAutoPosting();
+    await startAutoPosting();
     res.json({ success: true, message: "Auto-posting started" });
   } catch (err) {
-    console.error("Error starting auto-posting:", err);
-    res.status(500).json({ success: false, error: "Failed to start auto-posting" });
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
-/**
- * @route   POST /auto-post/stop
- * @desc    Stop auto-posting scheduler
- */
 router.post("/stop", async (req, res) => {
   try {
-    stopAutoPosting();
+    await stopAutoPosting();
     res.json({ success: true, message: "Auto-posting stopped" });
   } catch (err) {
-    console.error("Error stopping auto-posting:", err);
-    res.status(500).json({ success: false, error: "Failed to stop auto-posting" });
+    res.status(500).json({ success: false, error: err.message });
   }
 });
-
 
 router.get("/status", async (req, res) => {
-  try {
-    const scheduler = await AutoPost.findOne();
-    if (!scheduler) {
-      return res.json({ running: false });
-    }
-    res.json({
-      running: scheduler.status === "active",
-      lastPostedAt: scheduler.lastPostedAt,
-      nextPostAt: scheduler.nextPostAt,
-      linkedInPosts: scheduler.linkedInPosts
-    });
-  } catch (err) {
-    console.error("Error fetching auto-post status:", err);
-    res.status(500).json({ error: "Failed to fetch auto-post status" });
-  }
+  const status = await getSchedulerStatus(
+
+  );
+  res.json({ success: true, data: status });
 });
 
-
-
+router.post("/update", async (req, res) => {
+  const { intervalMinutes, cron } = req.body;
+  const result = await updateAutoPostSchedule(intervalMinutes, cron);
+  res.json(result);
+});
 
 /**
  * Approve manually
@@ -173,16 +156,17 @@ router.get("/trending-topics", async (req, res) => {
     const limitNum = parseInt(limit, 10);
 
     // 🔗 Your existing Google News API
-    const newsApiUrl = `http://localhost:5003/api/news`;
+    console.log('BASE_URL', process.env.BASE_URL)
+    const newsApiUrl = `${process.env.BASE_URL}/news`;
 
     const newsResponse = await axios.get(newsApiUrl, {
       params: {
         country,
         category: industry,
-        limit: 5 // fetch more for better trends
+        limit// fetch more for better trends
       }
     });
-  // console.log('newsResponse.data', newsResponse.data)
+   // console.log('newsResponse.data', newsResponse.data)
     const articles = newsResponse.data.articles || [];
 
     /**
@@ -288,6 +272,65 @@ router.post("/bulk-schedule", async (req, res) => {
   } catch (err) {
     console.error("Bulk scheduling error:", err);
     res.status(500).json({ error: "Failed to schedule posts" });
+  }
+});
+
+
+
+router.post("/generatePost", async (req, res) => {
+  const { topic, autoApprove = false, image } = req.body;
+
+  try {
+    console.log('Generating post for topic:', topic, 'with autoApprove:', autoApprove, image);
+    const content = await generatePostContent(topic);
+
+    let post = await Post.create({
+      topic,
+      content,
+      images: image ? [image] : ["https://images.icc-cricket.com/image/private/s--ceTYWUWH--/v1765887122/prd/assets/app-nav-dropdown/u19-cwc-2026-events-dropdown.png"],
+      autoApprove: !!autoApprove,
+      status: autoApprove ? "approved" : "pending",
+      attempts: 0,
+    });
+
+    let claimed = null;
+
+    // 🚀 Auto-posting flow
+    if (autoApprove) {
+      claimed = await Post.findOneAndUpdate(
+        { _id: post._id, status: "approved" },
+        { $set: { status: "scheduled", scheduledAt: new Date(), attempts: 1 } },
+        { new: true }
+      );
+
+      // If you want to actually post to LinkedIn later:
+      /*
+      if (claimed) {
+        const imageUrns = [];
+        for (const imgPath of claimed.images) {
+          const urn = await uploadImageToLinkedIn(imgPath);
+          imageUrns.push(urn);
+        }
+
+        await createLinkedInPost(claimed.content, imageUrns);
+
+        claimed = await Post.findByIdAndUpdate(
+          claimed._id,
+          { status: "posted", postedAt: new Date() },
+          { new: true }
+        );
+      }
+      */
+    }
+
+    res.json({
+      success: true,
+      post: claimed || post,
+    });
+
+  } catch (err) {
+    console.error("❌ Error generating post:", err);
+    res.status(500).json({ success: false, error: "Failed to generate content" });
   }
 });
 

@@ -6,7 +6,9 @@ const autoPostSchema = new mongoose.Schema({
   status: { type: String, enum: ["active", "stopped"], default: "active" },
   startDate: { type: Date, default: Date.now },
   nextPostAt: { type: Date, default: () => new Date() },
-  interval: { type: Number, default: 24 * 60 * 60 * 1000 }, // 1 day
+  interval: { type: Number, default: 24 * 60 * 60 * 1000 }, // milliseconds
+  intervalMinutes: { type: Number, default: 1440 }, // frontend-friendly interval in minutes
+  cron: { type: String, default: "*/1440 * * * *" }, // cron expression
   lastPostedAt: { type: Date },
   linkedInPosts: [
     { url: { type: String }, postedAt: { type: Date } },

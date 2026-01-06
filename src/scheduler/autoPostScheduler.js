@@ -1,11 +1,11 @@
+// controllers/autoPostController.js
 import cron from "node-cron";
 import axios from "axios";
 import dotenv from "dotenv";
 
 import Post from "../models/Post.js";
 import AutoPost from "../models/AutoPost.js";
-
-import { generatePostContent, generateImages } from "../content.js";
+import { generatePostContent } from "../content.js";
 import { uploadImageToLinkedIn, createLinkedInPost } from "../linkedin.js";
 
 dotenv.config();
@@ -31,46 +31,37 @@ const getRandomIndustry = () =>
   INDUSTRIES[Math.floor(Math.random() * INDUSTRIES.length)];
 
 /* ============================
-   GOOGLE NEWS (INTERNAL USE)
+   GOOGLE NEWS FETCHER
 ============================ */
-const getRandomGoogleNewsTopic = async ({
-  country = "IN",
-  limit = 50
-} = {}) => {
+const getRandomGoogleNewsTopic = async ({ country = "IN", limit = 10 } = {}) => {
   try {
-    const industry = getRandomIndustry();
+    const newsApiUrl = `${process.env.BASE_URL}/news`;
 
-    const newsApiUrl =
-      "https://1b8h8nts-5000.inc1.devtunnels.ms/api/news";
-
-    const newsResponse = await axios.get(newsApiUrl, {
+    const { data } = await axios.get(newsApiUrl, {
       params: {
         country,
-        category: industry,
+        category: getRandomIndustry(),
         limit
       }
     });
 
-    const articles = newsResponse.data?.articles || [];
-    if (!articles.length) return null;
+    const articles = data.articles || [];
+    const validArticles = articles.filter(a => a.title && a.thumbnail && a.link);
 
-    const topics = articles.map(article => ({
-      topic: article.title,
-      description: article.description
-        ? article.description.replace(/<[^>]*>/g, "").slice(0, 120)
-        : "Trending news",
-      source: article.source,
-      publishedAt: article.published,
-      link: article.link
-    }));
+    if (!validArticles.length) return null;
 
-    const selected =
-      topics[Math.floor(Math.random() * topics.length)];
+    const article = validArticles[Math.floor(Math.random() * validArticles.length)];
 
     return {
-      industry,
-      ...selected
+      topic: article.title,
+      description: article.description ? article.description.replace(/<[^>]*>/g, "").slice(0, 200) : "",
+      industry: getRandomIndustry(),
+      link: article.link,
+      thumbnail: article.thumbnail,
+      source: article.source,
+      publishedAt: article.published
     };
+
   } catch (err) {
     console.error("❌ Google News fetch error:", err.message);
     return null;
@@ -91,41 +82,40 @@ export const startAutoPosting = async () => {
 
   if (cronJob) return;
 
-  // ⏱ every 2 minutes (testing)
-  cronJob = cron.schedule("*/2 * * * *", async () => {
+  const cronExpression = scheduler.cron || "*/1440 * * * *"; // default once a day
+
+  cronJob = cron.schedule(cronExpression, async () => {
     let postToSend = null;
 
     try {
       const now = new Date();
-
       const scheduler = await AutoPost.findOne();
       if (!scheduler || scheduler.status !== "active") return;
 
-      // 🔹 Check scheduled posts
+      // Check for scheduled posts
       postToSend = await Post.findOne({
         status: "scheduled",
         scheduledAt: { $lte: now }
       });
 
-      // 🔹 Auto-generate if none scheduled
+      // Auto-generate post if none scheduled
       if (!postToSend) {
         const news = await getRandomGoogleNewsTopic();
         if (!news) return;
 
         const enrichedTopic = `
-                                ${news.topic}
-                                Industry: ${news.industry}
-                                Summary: ${news.description}
-                                Source: ${news.link}
-                              `.trim();
+          ${news.topic}
+          Industry: ${news.industry}
+          Summary: ${news.description}
+          Source: ${news.link}
+        `.trim();
 
         const content = await generatePostContent(enrichedTopic);
-        const images = await generateImages(news.topic);
 
         postToSend = await Post.create({
           topic: news.topic,
           content,
-          images,
+          images: news.thumbnail ? [news.thumbnail] : [],
           industry: news.industry,
           sourceUrl: news.link,
           status: "posting"
@@ -134,41 +124,35 @@ export const startAutoPosting = async () => {
         postToSend.status = "posting";
         await postToSend.save();
       }
-      console.log('postToSend', postToSend);
-      // 🔹 Upload images
+
+      console.log("📤 Posting:", postToSend.topic);
+
+      // Upload images to LinkedIn
       let uploadedImages = [];
-      if (postToSend.images?.length) {
+      if (Array.isArray(postToSend.images) && postToSend.images.length) {
         uploadedImages = await Promise.all(
-          postToSend.images.map(img =>
-            uploadImageToLinkedIn(img)
-          )
+          postToSend.images.filter(Boolean).map(uploadImageToLinkedIn)
         );
       }
 
-      // 🔹 Create LinkedIn post
-      const linkedInUrl = await createLinkedInPost(
-        postToSend.content,
-        uploadedImages
-      );
+      // Create LinkedIn post
+      const linkedInUrl = await createLinkedInPost(postToSend.content, uploadedImages);
 
-      // 🔹 Update post
+      // Update post
       postToSend.status = "posted";
       postToSend.postedAt = now;
+      postToSend.scheduledAt = now;
       postToSend.linkedinPostUrl = linkedInUrl;
       await postToSend.save();
 
-      // 🔹 Update scheduler
+      // Update scheduler
       scheduler.lastPostedAt = now;
-      scheduler.nextPostAt = new Date(
-        now.getTime() + scheduler.interval
-      );
-      scheduler.linkedInPosts.push({
-        url: linkedInUrl,
-        postedAt: now
-      });
+      scheduler.nextPostAt = new Date(now.getTime() + scheduler.interval);
+      scheduler.linkedInPosts.push({ url: linkedInUrl, postedAt: now });
       await scheduler.save();
 
       console.log(`✅ Posted successfully: ${linkedInUrl}`);
+
     } catch (err) {
       console.error("❌ Auto-post error:", err);
 
@@ -182,7 +166,7 @@ export const startAutoPosting = async () => {
   });
 
   cronJob.start();
-  console.log("🚀 Auto-post scheduler started");
+  console.log(`🚀 Auto-post scheduler started with cron: ${cronExpression}`);
 };
 
 /* ============================
@@ -204,17 +188,53 @@ export const stopAutoPosting = async () => {
 };
 
 /* ============================
-   GET STATUS
+   UPDATE SCHEDULE (FROM FRONTEND)
+============================ */
+export const updateAutoPostSchedule = async (intervalMinutes, cron) => {
+  try {
+
+    let scheduler = await AutoPost.findOne();
+    if (!scheduler) scheduler = new AutoPost();
+
+    if (intervalMinutes) {
+      scheduler.intervalMinutes = intervalMinutes;
+      scheduler.interval = intervalMinutes * 60 * 1000;
+      scheduler.cron = `*/${intervalMinutes} * * * *`;
+    }
+
+    if (cron) scheduler.cron = cron;
+
+    await scheduler.save();
+
+    // restart cron job
+    if (cronJob) {
+      cronJob.stop();
+      cronJob = null;
+    }
+
+    await startAutoPosting();
+
+    return { success: true, cron: scheduler.cron, intervalMinutes: scheduler.intervalMinutes };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+};
+
+/* ============================
+   GET SCHEDULER STATUS
 ============================ */
 export const getSchedulerStatus = async () => {
   const scheduler = await AutoPost.findOne();
-  if (!scheduler)
-    return { status: "stopped", linkedInPosts: [] };
+  if (!scheduler) return ({ status: "stopped", linkedInPosts: [] });
 
-  return {
+  return({
     status: scheduler.status,
+    cron: scheduler.cron,
+    intervalMinutes: scheduler.intervalMinutes,
     lastPostedAt: scheduler.lastPostedAt,
     nextPostAt: scheduler.nextPostAt,
+    running: scheduler.status === "active"? true : false,
+    
     linkedInPosts: scheduler.linkedInPosts || []
-  };
+  });
 };
