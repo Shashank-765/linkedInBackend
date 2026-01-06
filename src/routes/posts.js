@@ -36,6 +36,8 @@ router.post("/generate", upload.single("image"), async (req, res) => {
       imagePath = imageUrl;
     }
 
+    
+
     const content = await generatePostContent(topic);
 
     const auto = autoApprove === true || autoApprove === "true";
