@@ -1,12 +1,10 @@
 import axios from "axios";
 import fs from "fs";
 import path from "path";
+import { TOKEN ,ORG_URN} from "./app";
 
-import dotenv from "dotenv";
-dotenv.config();
 
-const TOKEN = process.env.LINKEDIN_ACCESS_TOKEN;
-const ORG_URN = process.env.LINKEDIN_AUTHOR_URN;
+
 
 /**
  * Upload one image to LinkedIn

@@ -19,6 +19,11 @@ const USERS = {
   Shashank: { password: "123", env: ".env" },
 };
 
+// export const linkedinAuthor = process.env.LINKEDIN_AUTHOR_URN || "not set";
+export const TOKEN = process.env.LINKEDIN_ACCESS_TOKEN;
+export const ORG_URN = process.env.LINKEDIN_AUTHOR_URN;
+
+
 function loadEnv(file) {
   dotenv.config({ path: file, override: true });
   console.log(`🔁 Loaded env: ${file}`);
@@ -57,6 +62,7 @@ app.post("/login", async (req, res) => {
   const { username, password } = req.body;
 
   const user = USERS[username];
+  console.log('user', user)
   if (!user || user.password !== password) {
     return res.status(401).send("Invalid login");
   }
