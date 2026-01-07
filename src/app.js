@@ -29,7 +29,17 @@ function loadEnv(file) {
 loadEnv(".env");
 
 // ------------------ MIDDLEWARE ------------------
-app.use(cors({ origin: "*" }));
+
+app.use(
+  cors({
+    origin: (origin, cb) => cb(null, true),
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
+
+app.options(/.*/, cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static("public"));
