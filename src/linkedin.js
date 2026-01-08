@@ -1,7 +1,8 @@
 import axios from "axios";
 import fs from "fs";
 import path from "path";
-import { TOKEN ,ORG_URN} from "./app.js";
+import { getLinkedInConfig} from "./app.js";
+import { log } from "console";
 
 
 
@@ -10,6 +11,8 @@ import { TOKEN ,ORG_URN} from "./app.js";
  * Upload one image to LinkedIn
  */
 export async function uploadImageToLinkedIn(filePath) {
+  const { TOKEN, ORG_URN } = getLinkedInConfig();
+  console.log("🔑 Using LinkedIn ORG_URN:", ORG_URN);
   const initRes = await axios.post(
     "https://api.linkedin.com/rest/images?action=initializeUpload",
     { initializeUploadRequest: { owner: ORG_URN } },
@@ -59,7 +62,8 @@ export async function uploadImageToLinkedIn(filePath) {
  */
 export async function createLinkedInPost(commentary, imageUrns) {
   try {
-
+    const { TOKEN, ORG_URN } = getLinkedInConfig();
+    console.log("🔑 Using LinkedIn ORG_URN:", ORG_URN);
     // 🔒 1️⃣ Sanitize LinkedIn-breaking characters
     const sanitizeLinkedInText = (text) => {
       return text

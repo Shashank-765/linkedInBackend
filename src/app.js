@@ -19,9 +19,6 @@ const USERS = {
   Shashank: { password: "123", env: ".env" },
 };
 
-// export const linkedinAuthor = process.env.LINKEDIN_AUTHOR_URN || "not set";
-export let TOKEN = process.env.LINKEDIN_ACCESS_TOKEN;
-export let ORG_URN = process.env.LINKEDIN_AUTHOR_URN;
 
 
 function loadEnv(file) {
@@ -75,8 +72,7 @@ app.post("/login", async (req, res) => {
   // reconnect DB with new env
   await mongoose.disconnect();
   await mongoose.connect(process.env.MONGO_URI);
-  TOKEN = process.env.LINKEDIN_ACCESS_TOKEN;
-  ORG_URN = process.env.LINKEDIN_AUTHOR_URN;
+ 
 
   console.log(`✅ ${username} logged in, DB reconnected`);
 return res.send("Login successful");
@@ -84,6 +80,12 @@ return res.send("Login successful");
 });
 
 
+export function getLinkedInConfig() {
+  return {
+    TOKEN: process.env.LINKEDIN_ACCESS_TOKEN,
+    ORG_URN: process.env.LINKEDIN_AUTHOR_URN,
+  };
+}
 
 
 //return evn data for tesing which env used right now
