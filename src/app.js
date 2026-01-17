@@ -123,7 +123,7 @@ scheduleEveryFiveSeconds(async () => {
     status: "scheduled",
     scheduledAt: { $lte: now },
   }).limit(20);
-
+console.log('candidates', candidates)
   for (const candidate of candidates) {
     const claimed = await Post.findOneAndUpdate(
       { _id: candidate._id, status: "scheduled" },
@@ -152,7 +152,7 @@ scheduleEveryFiveSeconds(async () => {
       console.error("❌ Posting error:", claimed._id, err);
 
       const attempts = claimed.attempts || 1;
-      if (attempts >= 3) {
+      if (attempts >= 10) {
         await Post.findByIdAndUpdate(claimed._id, {
           $set: { status: "failed", lastError: err.message },
         });

@@ -5,7 +5,7 @@ import cron from "node-cron";
  */
 export function scheduleEveryFiveSeconds(job) {
   const task = cron.schedule(
-    "*/2 * * * *", // every 2 minutes
+    "*/1 * * * *", // every 2 minutes
     async () => {
       await job();
     },

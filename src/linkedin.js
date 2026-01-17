@@ -11,50 +11,50 @@ import { log } from "console";
  * Upload one image to LinkedIn
  */
 export async function uploadImageToLinkedIn(filePath) {
-  const { TOKEN, ORG_URN } = getLinkedInConfig();
-  console.log("🔑 Using LinkedIn ORG_URN:", ORG_URN);
-  const initRes = await axios.post(
-    "https://api.linkedin.com/rest/images?action=initializeUpload",
-    { initializeUploadRequest: { owner: ORG_URN } },
-    {
-      headers: {
-        Authorization: `Bearer ${TOKEN}`,
-        "LinkedIn-Version": "202508",
-        "Content-Type": "application/json",
-      },
-    }
-  );
+        const { TOKEN, ORG_URN } = getLinkedInConfig();
+        console.log("🔑 Using LinkedIn ORG_URN:", ORG_URN);
+        const initRes = await axios.post(
+          "https://api.linkedin.com/rest/images?action=initializeUpload",
+          { initializeUploadRequest: { owner: ORG_URN } },
+          {
+            headers: {
+              Authorization: `Bearer ${TOKEN}`,
+              "LinkedIn-Version": "202508",
+              "Content-Type": "application/json",
+            },
+          }
+        );
 
-  const uploadUrl = initRes.data.value.uploadUrl;
-  const assetUrn = initRes.data.value.image;
+        const uploadUrl = initRes.data.value.uploadUrl;
+        const assetUrn = initRes.data.value.image;
 
-  let imageBuffer;
+        let imageBuffer;
 
-  if (filePath.startsWith("http")) {
-    // Fetch remote image
-    const res = await axios.get(filePath, {
-  responseType: "arraybuffer",
-  headers: {
-    "User-Agent":
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
-    Referer: filePath,
-  },
-  timeout: 15000,
-});
-    imageBuffer = res.data;
-  } else {
-    // Read local file
-    const absolutePath = path.join(process.cwd(), filePath);
-    imageBuffer = fs.readFileSync(absolutePath);
-  }
+        if (filePath.startsWith("http")) {
+          // Fetch remote image
+          const res = await axios.get(filePath, {
+        responseType: "arraybuffer",
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+          Referer: filePath,
+        },
+        timeout: 15000,
+      });
+          imageBuffer = res.data;
+        } else {
+          // Read local file
+          const absolutePath = path.join(process.cwd(), filePath);
+          imageBuffer = fs.readFileSync(absolutePath);
+        }
 
-  await axios.put(uploadUrl, imageBuffer, {
-    headers: { "Content-Type": "image/png" },
-    maxBodyLength: Infinity,
-  });
+        await axios.put(uploadUrl, imageBuffer, {
+          headers: { "Content-Type": "image/png" },
+          maxBodyLength: Infinity,
+        });
 
-  return assetUrn;
+        return assetUrn;
 }
 
 /**

@@ -106,6 +106,21 @@ router.post("/approve/:id", async (req, res) => {
   res.json(post);
 });
 
+
+/**
+ * update post
+ */
+router.put("/update/:id", async (req, res) => {
+  const {  content } = req.body;
+  console.log('content', content)
+  const post = await Post.findByIdAndUpdate(
+    req.params.id,
+    {  content },
+    { new: true }
+  );
+  res.json(post);
+});
+
 /**
  * Schedule post
  */
@@ -118,6 +133,27 @@ router.post("/schedule/:id", async (req, res) => {
   );
   res.json(post);
 });
+
+/**
+ * delete post
+ */
+router.delete("/delete/:id", async (req, res) => {
+  try {
+    console.log('req.params', req.params)
+    const post = await Post.findByIdAndDelete(req.params.id);
+    if (!post) {
+      return res.status(404).json({ error: "Post not found" });
+    }
+    res.json({ success: true, message: "Post deleted successfully" });
+  } catch (err) {
+    console.error("❌ Error deleting post:", err);
+    res.status(500).json({
+      error: "Failed to delete post",
+      details: err.message,
+    });
+  }
+});
+
 
 /**
  * List all posts
